@@ -3,209 +3,186 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EPS</title>
+<title>Chrono CO EPS</title>
+
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="manifest" href="manifest.json">
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js")
+    .then(()=>console.log("Service Worker OK"))
+    .catch(err=>console.log("SW failed", err));
+}
+</script>
+
 <style>
-:root { --bg1:#1e3a8a; --bg2:#2563eb; }
-.light { --bg1:#e0f2fe; --bg2:#bae6fd; }
-body { background:linear-gradient(135deg,var(--bg1),var(--bg2)); min-height:100vh;color:white; }
-.card { transition:.2s; cursor:grab; }
-.card:hover { transform:scale(1.03); box-shadow:0 0 15px rgba(0,0,0,0.4); }
-.emoji-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(40px,1fr)); gap:5px; max-height:150px; overflow:auto; margin-bottom:0.5rem; }
-.emoji-grid button { font-size:1.5rem; cursor:pointer; transition:0.2s; }
-.emoji-grid button:hover { transform:scale(1.2); }
+html,body{margin:0;height:100%;background:#0f172a;color:white}
+.card{background:#020617}
+button,input{font-size:1.25rem}
 </style>
 </head>
-<body class="p-4">
-<div class="max-w-[1200px] mx-auto">
 
-<header class="text-center mb-4">
-<h1 class="text-4xl font-bold">EPS</h1>
-<p class="opacity-80">by T.Bourgouin</p>
+<body>
+
+<header class="text-center py-4">
+<h1 class="text-3xl font-bold">🧭 Chrono CO EPS</h1>
+<p class="text-slate-400">Multi-courses • Tablette • Offline • PWA</p>
 </header>
 
-<!-- CONTROLES -->
-<div class="flex flex-wrap gap-2 justify-center mb-4">
-<button id="themeBtn" class="bg-white text-black px-3 py-1 rounded">🌗 Thème</button>
-<button id="exportBtn" class="bg-white text-black px-3 py-1 rounded">📤 Export</button>
-<label class="bg-white text-black px-3 py-1 rounded cursor-pointer">
-📥 Import<input type="file" hidden id="importInput">
-</label>
+<div class="px-4 mb-4 flex gap-2">
+<input id="newName" placeholder="Nom de l'élève"
+ class="flex-1 bg-black text-white rounded px-4 py-3">
+<button onclick="addStudent()"
+ class="bg-white text-black px-6 rounded-xl font-bold">➕</button>
 </div>
 
-<!-- AJOUT -->
-<div class="grid sm:grid-cols-6 gap-2 mb-2">
-<input id="name" placeholder="Nom" class="p-2 rounded text-black">
-<input id="url" placeholder="Lien" class="p-2 rounded text-black">
-<input id="cat" placeholder="Catégorie" class="p-2 rounded text-black">
-<input id="icon" placeholder="Emoji" class="p-2 rounded text-black" readonly>
-<input id="color" type="color" value="#4f46e5" class="h-10">
-<button id="addBtn" type="button" class="bg-white text-black rounded font-bold mt-2">➕ Ajouter</button>
+<div class="grid grid-cols-2 gap-3 px-4 mb-4">
+<button onclick="startAll()" class="bg-green-600 py-4 rounded-xl font-bold">▶ START</button>
+<button onclick="stopAll()" class="bg-red-600 py-4 rounded-xl font-bold">⏹ STOP</button>
+<button onclick="resetAll()" class="bg-orange-600 py-4 rounded-xl font-bold">↺ RESET</button>
+<button onclick="showResults()" class="bg-blue-600 py-4 rounded-xl font-bold">📊 Classement</button>
 </div>
 
-<!-- GRILLE EMOJIS -->
-<div class="emoji-grid" id="emojiGrid"></div>
+<div id="list" class="px-4 space-y-3"></div>
 
-<!-- FILTRES -->
-<div class="flex gap-2 mb-4">
-<input id="search" placeholder="🔍 Rechercher" class="flex-1 p-2 rounded text-black">
-<select id="filterCat" class="p-2 rounded text-black">
-<option value="">Toutes catégories</option>
-</select>
-</div>
-
-<!-- CARTES -->
-<div id="apps" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
-
+<div class="px-4 mt-4">
+<button onclick="exportCSV()"
+ class="w-full bg-slate-700 py-4 rounded-xl font-bold">
+💾 Export Excel (CSV)
+</button>
 </div>
 
 <script>
-// ==========================
-// THEME
-// ==========================
-let theme = localStorage.getItem("theme")||"dark";
-if(theme==="light") document.body.classList.add("light");
-document.getElementById("themeBtn").addEventListener("click", () => {
-    theme = theme==="dark"?"light":"dark";
-    document.body.classList.toggle("light");
-    localStorage.setItem("theme", theme);
-});
+let students = JSON.parse(localStorage.getItem("chronoCO")) || [];
+let ticker=null;
 
-// ==========================
-// DONNÉES
-// ==========================
-let apps = JSON.parse(localStorage.getItem("hubApps")||"[]");
+function save(){localStorage.setItem("chronoCO",JSON.stringify(students));}
+function fmt(ms){ const s=Math.floor(ms/1000); return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }
 
-// Applis natives
-const nativeApps = [
-  { name: "Google Drive", url: "https://drive.google.com", icon: "📂", cat: "Native", color: "#34d399" },
-  { name: "Google Docs", url: "https://docs.google.com", icon: "📄", cat: "Native", color: "#3b82f6" },
-  { name: "Google Classroom", url: "https://classroom.google.com", icon: "🎓", cat: "Native", color: "#facc15" },
-  { name: "Google Maps", url: "geo:0,0?q=", icon: "🗺️", cat: "Native", color: "#10b981" },
-  { name: "YouTube", url: "https://youtube.com", icon: "🎬", cat: "Native", color: "#ef4444" }
-];
-// Ajouter natives si non présentes
-let added=false;
-nativeApps.forEach(n=>{
-  if(!apps.some(a=>a.name===n.name && a.cat==="Native")){
-    apps.push(n);
-    added=true;
-  }
-});
-if(added) localStorage.setItem("hubApps", JSON.stringify(apps));
-
-// ==========================
-// EMOJIS
-// ==========================
-const emojis = ["🏃‍♂️","🏃‍♀️","⏱️","📂","📄","🎯","📚","🧭","🔢","⚡","📝","📷","🎵","🌟","🖊️","🗂️","📊","📌","📅","🛠️","🧩","🎒","📓","🗒️","🕹️","🛎️","🧰","🖍️","🎤","🏅","🥇","🥈","🥉","🗑️","💡","🧾","🔎","🔔","📍","🎫","🔗","🖥️","📲"];
-const emojiGrid=document.getElementById("emojiGrid");
-const iconInput=document.getElementById("icon");
-emojis.forEach(e=>{
-  const btn=document.createElement("button");
-  btn.innerText=e;
-  btn.type="button";
-  btn.addEventListener("click", ()=>{ iconInput.value=e; iconInput.focus(); });
-  emojiGrid.appendChild(btn);
-});
-
-// ==========================
-// AJOUT APP
-// ==========================
-document.getElementById("addBtn").addEventListener("click", ()=>{
-    const name = document.getElementById("name").value.trim();
-    const url = document.getElementById("url").value.trim();
-    const cat = document.getElementById("cat").value.trim();
-    const icon = iconInput.value || "🔗";
-    const color = document.getElementById("color").value;
-
-    if(!name || !url){ alert("Nom et lien obligatoires"); return; }
-
-    apps.push({id:Date.now(), name, url, cat, icon, color, fav:false});
-    localStorage.setItem("hubApps", JSON.stringify(apps));
-
-    document.getElementById("name").value="";
-    document.getElementById("url").value="";
-    document.getElementById("cat").value="";
-    iconInput.value="";
-    render();
-});
-
-// ==========================
-// RENDER CARTES
-// ==========================
-let dragIndex=null;
-function render(){
-    const list=document.getElementById("apps");
-    const cats=[...new Set(apps.map(a=>a.cat).filter(Boolean))];
-    document.getElementById("filterCat").innerHTML='<option value="">Toutes catégories</option>'+cats.map(c=>`<option>${c}</option>`).join("");
-    
-    const search=document.getElementById("search").value.toLowerCase();
-    const filterCat=document.getElementById("filterCat").value;
-    
-    list.innerHTML="";
-    apps
-      .filter(a => a.name.toLowerCase().includes(search))
-      .filter(a => !filterCat || a.cat===filterCat)
-      .sort((a,b)=>b.fav-a.fav)
-      .forEach((a,i)=>{
-        const card=document.createElement("div");
-        card.className="card p-4 rounded-xl shadow";
-        card.draggable=true;
-        card.style.background=a.color;
-        card.ondragstart=()=>dragStart(i);
-        card.ondragover=(e)=>e.preventDefault();
-        card.ondrop=()=>drop(i);
-
-        // contenu
-        card.innerHTML=`
-            <div class="text-3xl">${a.icon}</div>
-            <h2 class="text-xl font-bold">${a.name}</h2>
-            <p class="text-sm opacity-80">${a.cat||""}</p>
-            <div class="mt-2 flex gap-2">
-                <button class="open-btn bg-white text-black px-2 rounded">Ouvrir</button>
-                <button class="fav-btn">⭐</button>
-                <button class="del-btn">🗑️</button>
-            </div>
-        `;
-        list.appendChild(card);
-
-        // EVENTS boutons
-        card.querySelector(".open-btn").addEventListener("click", ()=>window.open(a.url,"_blank"));
-        card.querySelector(".fav-btn").addEventListener("click", ()=>{ a.fav^=1; localStorage.setItem("hubApps", JSON.stringify(apps)); render(); });
-        card.querySelector(".del-btn").addEventListener("click", ()=>{
-            if(a.cat==="Native"){ alert("Impossible de supprimer une appli native"); return; }
-            if(confirm("Supprimer ?")){ apps=apps.filter(app=>app.id!==a.id); localStorage.setItem("hubApps", JSON.stringify(apps)); render(); }
-        });
+function startTicker(){ 
+  if(ticker) return;
+  ticker=setInterval(()=>{
+    const now=performance.now();
+    students.forEach(s=>{
+      if(s.running){
+        s.elapsed = now - s.start;
+        const el = document.getElementById("t"+s.id);
+        if(el) el.textContent = fmt(s.elapsed);
+      }
     });
+  },200);
+}
+function stopTicker(){ clearInterval(ticker); ticker=null; }
+
+function addStudent(){
+  const input=document.getElementById("newName"); 
+  const name=input.value.trim();
+  if(!name){alert("Nom requis");return;}
+  students.push({id:Date.now(),name,elapsed:0,start:0,running:false,races:[]});
+  input.value=""; save(); render();
+}
+function rename(id){ 
+  const s=students.find(e=>e.id===id); 
+  const n=prompt("Modifier le nom :",s.name); 
+  if(n){s.name=n;save();render();}
+}
+function removeStudent(id){ 
+  if(!confirm("Supprimer cet élève ?"))return; 
+  students=students.filter(s=>s.id!==id); 
+  save();render(); 
 }
 
-// ==========================
-// DRAG & DROP
-// ==========================
-function dragStart(i){dragIndex=i;}
-function drop(i){ if(dragIndex===null) return; const moved=apps.splice(dragIndex,1)[0]; apps.splice(i,0,moved); dragIndex=null; localStorage.setItem("hubApps", JSON.stringify(apps)); render(); }
+function startAll(){ 
+  const now=performance.now(); 
+  students.forEach(s=>{ 
+    if(!s.running){ s.start=now-s.elapsed; s.running=true; } 
+  }); 
+  startTicker(); save(); render();
+}
+function stopAll(){ students.forEach(s=>s.running=false); stopTicker(); save(); render();}
+function resetAll(){ 
+  if(!confirm("Réinitialiser tous les chronos ?"))return; 
+  students.forEach(s=>{s.elapsed=0;s.running=false;}); 
+  stopTicker(); save(); render();
+}
+function toggle(id){ 
+  const s=students.find(e=>e.id===id); 
+  if(!s.running){ 
+    s.start=performance.now()-s.elapsed; 
+    s.running=true; 
+    startTicker(); 
+  } else s.running=false; 
+  save(); render(); 
+}
+function resetOne(id){ 
+  const s=students.find(e=>e.id===id); 
+  s.elapsed=0;s.running=false; save(); render(); 
+}
 
-// ==========================
-// EXPORT / IMPORT
-// ==========================
-document.getElementById("exportBtn").addEventListener("click", ()=>{
-    const blob=new Blob([JSON.stringify(apps)],{type:"application/json"});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="hub-backup.json";
-    a.click();
-});
-document.getElementById("importInput").addEventListener("change", e=>{
-    const r=new FileReader();
-    r.onload=()=>{ apps=JSON.parse(r.result); localStorage.setItem("hubApps", JSON.stringify(apps)); render(); };
-    r.readAsText(e.target.files[0]);
-});
+function validateOne(id){
+  const s=students.find(e=>e.id===id);
+  if(s.elapsed<=0) return;
+  s.races.push({date:new Date().toLocaleString(),time:s.elapsed});
+  s.elapsed=0;s.running=false; save(); render();
+}
 
-// ==========================
-// INITIAL RENDER
-// ==========================
+function render(){
+  const box=document.getElementById("list"); box.innerHTML="";
+  students.forEach(s=>{
+    box.innerHTML+=`
+    <div class="card p-4 rounded-xl border border-slate-700">
+      <div class="flex justify-between mb-2">
+        <span class="text-xl font-semibold">${s.name}</span>
+        <div class="space-x-2">
+          <button onclick="rename(${s.id})" class="bg-slate-600 px-2 rounded text-white">✏️</button>
+          <button onclick="removeStudent(${s.id})" class="bg-red-700 px-2 rounded text-white">✖</button>
+        </div>
+      </div>
+      <div id="t${s.id}" class="text-center text-6xl font-mono font-bold mb-3">${fmt(s.elapsed)}</div>
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="toggle(${s.id})" class="py-3 rounded text-white font-bold ${s.running ? 'bg-red-600' : 'bg-green-600'}">
+          ${s.running ? 'STOP' : 'START'}
+        </button>
+        <button onclick="resetOne(${s.id})" class="bg-orange-600 py-3 rounded text-white font-bold">RESET</button>
+        <button onclick="validateOne(${s.id})" class="bg-emerald-600 py-3 rounded text-white font-bold">💾</button>
+      </div>
+      <div class="text-sm text-slate-400 mt-2">Courses : ${s.races.length}</div>
+    </div>`;
+  });
+}
+
+function showResults(){
+  const rows=[];
+  students.forEach(s=>{ 
+    if(s.races.length){ 
+      const last=s.races.at(-1).time; 
+      const best=Math.min(...s.races.map(r=>r.time)); 
+      rows.push({name:s.name,last,best}); 
+    } 
+  });
+  rows.sort((a,b)=>a.last-b.last);
+  const w=window.open(""); 
+  w.document.write(`<h1>Classement</h1><table border="1" cellpadding="8"><tr><th>#</th><th>Nom</th><th>Dernière</th><th>Meilleure</th></tr>`);
+  rows.forEach((r,i)=>{w.document.write(`<tr><td>${i+1}</td><td>${r.name}</td><td>${fmt(r.last)}</td><td>${fmt(r.best)}</td></tr>`);});
+  w.document.write(`</table>`);
+}
+
+function exportCSV(){
+  let csv="Nom;Numéro de course;Date;Temps\n";
+  students.forEach(s=>{
+    s.races.forEach((r,i)=>{
+      csv+=`${s.name};${i+1};${r.date};${fmt(r.time)}\n`;
+    });
+  });
+  const blob=new Blob([csv],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="chrono_CO_EPS.csv";
+  a.click();
+}
+
 render();
 </script>
 </body>
 </html>
-
