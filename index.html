@@ -26,10 +26,10 @@ body { background:linear-gradient(135deg,var(--bg1),var(--bg2)); min-height:100v
 
 <!-- CONTROLES -->
 <div class="flex flex-wrap gap-2 justify-center mb-4">
-<button onclick="toggleTheme()" class="bg-white text-black px-3 py-1 rounded">🌗 Thème</button>
-<button onclick="exportData()" class="bg-white text-black px-3 py-1 rounded">📤 Export</button>
+<button id="themeBtn" class="bg-white text-black px-3 py-1 rounded">🌗 Thème</button>
+<button id="exportBtn" class="bg-white text-black px-3 py-1 rounded">📤 Export</button>
 <label class="bg-white text-black px-3 py-1 rounded cursor-pointer">
-📥 Import<input type="file" hidden onchange="importData(event)">
+📥 Import<input type="file" hidden id="importInput">
 </label>
 </div>
 
@@ -48,8 +48,8 @@ body { background:linear-gradient(135deg,var(--bg1),var(--bg2)); min-height:100v
 
 <!-- FILTRES -->
 <div class="flex gap-2 mb-4">
-<input id="search" placeholder="🔍 Rechercher" class="flex-1 p-2 rounded text-black" oninput="render()">
-<select id="filterCat" onchange="render()" class="p-2 rounded text-black">
+<input id="search" placeholder="🔍 Rechercher" class="flex-1 p-2 rounded text-black">
+<select id="filterCat" class="p-2 rounded text-black">
 <option value="">Toutes catégories</option>
 </select>
 </div>
@@ -60,19 +60,23 @@ body { background:linear-gradient(135deg,var(--bg1),var(--bg2)); min-height:100v
 </div>
 
 <script>
+// ==========================
 // THEME
+// ==========================
 let theme = localStorage.getItem("theme")||"dark";
 if(theme==="light") document.body.classList.add("light");
-function toggleTheme(){ 
-  theme=theme==="dark"?"light":"dark"; 
-  document.body.classList.toggle("light"); 
-  localStorage.setItem("theme",theme); 
-}
+document.getElementById("themeBtn").addEventListener("click", () => {
+    theme = theme==="dark"?"light":"dark";
+    document.body.classList.toggle("light");
+    localStorage.setItem("theme", theme);
+});
 
+// ==========================
 // DONNÉES
+// ==========================
 let apps = JSON.parse(localStorage.getItem("hubApps")||"[]");
 
-// APPLIS NATIVES ANDROID/iOS
+// Applis natives
 const nativeApps = [
   { name: "Google Drive", url: "https://drive.google.com", icon: "📂", cat: "Native", color: "#34d399" },
   { name: "Google Docs", url: "https://docs.google.com", icon: "📄", cat: "Native", color: "#3b82f6" },
@@ -90,7 +94,9 @@ nativeApps.forEach(n=>{
 });
 if(added) localStorage.setItem("hubApps", JSON.stringify(apps));
 
+// ==========================
 // EMOJIS
+// ==========================
 const emojis = ["🏃‍♂️","🏃‍♀️","⏱️","📂","📄","🎯","📚","🧭","🔢","⚡","📝","📷","🎵","🌟","🖊️","🗂️","📊","📌","📅","🛠️","🧩","🎒","📓","🗒️","🕹️","🛎️","🧰","🖍️","🎤","🏅","🥇","🥈","🥉","🗑️","💡","🧾","🔎","🔔","📍","🎫","🔗","🖥️","📲"];
 const emojiGrid=document.getElementById("emojiGrid");
 const iconInput=document.getElementById("icon");
@@ -98,85 +104,108 @@ emojis.forEach(e=>{
   const btn=document.createElement("button");
   btn.innerText=e;
   btn.type="button";
-  btn.onclick=()=>{ iconInput.value=e; iconInput.focus(); };
+  btn.addEventListener("click", ()=>{ iconInput.value=e; iconInput.focus(); });
   emojiGrid.appendChild(btn);
 });
 
+// ==========================
 // AJOUT APP
+// ==========================
 document.getElementById("addBtn").addEventListener("click", ()=>{
-  const name=document.getElementById("name").value.trim();
-  const url=document.getElementById("url").value.trim();
-  const cat=document.getElementById("cat").value.trim();
-  const icon=iconInput.value||"🔗";
-  const color=document.getElementById("color").value;
+    const name = document.getElementById("name").value.trim();
+    const url = document.getElementById("url").value.trim();
+    const cat = document.getElementById("cat").value.trim();
+    const icon = iconInput.value || "🔗";
+    const color = document.getElementById("color").value;
 
-  if(!name||!url){ alert("Nom et lien obligatoires"); return; }
+    if(!name || !url){ alert("Nom et lien obligatoires"); return; }
 
-  apps.push({id:Date.now(), name, url, cat, icon, color, fav:false});
-  localStorage.setItem("hubApps", JSON.stringify(apps));
+    apps.push({id:Date.now(), name, url, cat, icon, color, fav:false});
+    localStorage.setItem("hubApps", JSON.stringify(apps));
 
-  document.getElementById("name").value="";
-  document.getElementById("url").value="";
-  document.getElementById("cat").value="";
-  iconInput.value="";
-  render();
+    document.getElementById("name").value="";
+    document.getElementById("url").value="";
+    document.getElementById("cat").value="";
+    iconInput.value="";
+    render();
 });
 
-// SUPPRIMER / FAVORI / OUVRIR
-function del(id){ 
-  const app = apps.find(a=>a.id===id);
-  if(app.cat==="Native"){ alert("Impossible de supprimer une appli native"); return; }
-  if(confirm("Supprimer ?")){ apps=apps.filter(a=>a.id!==id); localStorage.setItem("hubApps",JSON.stringify(apps)); render(); } 
-}
-function fav(id){ apps.find(a=>a.id===id).fav^=1; localStorage.setItem("hubApps",JSON.stringify(apps)); render(); }
-function openApp(a){ window.open(a.url,"_blank"); }
-
-// DRAG & DROP
+// ==========================
+// RENDER CARTES
+// ==========================
 let dragIndex=null;
-function dragStart(i){dragIndex=i;}
-function dragOver(e){e.preventDefault();}
-function drop(i){ if(dragIndex===null)return; const moved=apps.splice(dragIndex,1)[0]; apps.splice(i,0,moved); dragIndex=null; localStorage.setItem("hubApps",JSON.stringify(apps)); render(); }
-
-// RENDER
 function render(){
-  const list=document.getElementById("apps");
-  const cats=[...new Set(apps.map(a=>a.cat).filter(Boolean))];
-  document.getElementById("filterCat").innerHTML='<option value="">Toutes catégories</option>'+cats.map(c=>`<option>${c}</option>`).join("");
-  let filtered=apps
-    .filter(a=>a.name.toLowerCase().includes(document.getElementById("search").value.toLowerCase()))
-    .filter(a=>!document.getElementById("filterCat").value||a.cat===document.getElementById("filterCat").value)
-    .sort((a,b)=>b.fav-a.fav);
-  list.innerHTML="";
-  filtered.forEach((a,i)=>{
-    const card=document.createElement("div");
-    card.className="card p-4 rounded-xl shadow";
-    card.draggable=true;
-    card.style.background=a.color;
-    card.ondragstart=()=>dragStart(i);
-    card.ondragover=(e)=>dragOver(e);
-    card.ondrop=()=>drop(i);
-    card.innerHTML=`
-      <div class="text-3xl">${a.icon}</div>
-      <h2 class="text-xl font-bold">${a.name}</h2>
-      <p class="text-sm opacity-80">${a.cat||""}</p>
-      <div class="mt-2 flex gap-2">
-        <button onclick='openApp(${JSON.stringify(a)})' class="bg-white text-black px-2 rounded">Ouvrir</button>
-        <button onclick="fav(${a.id})">⭐</button>
-        <button onclick="del(${a.id})">🗑️</button>
-      </div>
-    `;
-    list.appendChild(card);
-  });
+    const list=document.getElementById("apps");
+    const cats=[...new Set(apps.map(a=>a.cat).filter(Boolean))];
+    document.getElementById("filterCat").innerHTML='<option value="">Toutes catégories</option>'+cats.map(c=>`<option>${c}</option>`).join("");
+    
+    const search=document.getElementById("search").value.toLowerCase();
+    const filterCat=document.getElementById("filterCat").value;
+    
+    list.innerHTML="";
+    apps
+      .filter(a => a.name.toLowerCase().includes(search))
+      .filter(a => !filterCat || a.cat===filterCat)
+      .sort((a,b)=>b.fav-a.fav)
+      .forEach((a,i)=>{
+        const card=document.createElement("div");
+        card.className="card p-4 rounded-xl shadow";
+        card.draggable=true;
+        card.style.background=a.color;
+        card.ondragstart=()=>dragStart(i);
+        card.ondragover=(e)=>e.preventDefault();
+        card.ondrop=()=>drop(i);
+
+        // contenu
+        card.innerHTML=`
+            <div class="text-3xl">${a.icon}</div>
+            <h2 class="text-xl font-bold">${a.name}</h2>
+            <p class="text-sm opacity-80">${a.cat||""}</p>
+            <div class="mt-2 flex gap-2">
+                <button class="open-btn bg-white text-black px-2 rounded">Ouvrir</button>
+                <button class="fav-btn">⭐</button>
+                <button class="del-btn">🗑️</button>
+            </div>
+        `;
+        list.appendChild(card);
+
+        // EVENTS boutons
+        card.querySelector(".open-btn").addEventListener("click", ()=>window.open(a.url,"_blank"));
+        card.querySelector(".fav-btn").addEventListener("click", ()=>{ a.fav^=1; localStorage.setItem("hubApps", JSON.stringify(apps)); render(); });
+        card.querySelector(".del-btn").addEventListener("click", ()=>{
+            if(a.cat==="Native"){ alert("Impossible de supprimer une appli native"); return; }
+            if(confirm("Supprimer ?")){ apps=apps.filter(app=>app.id!==a.id); localStorage.setItem("hubApps", JSON.stringify(apps)); render(); }
+        });
+    });
 }
-render();
 
-// PWA
-if("serviceWorker" in navigator){ navigator.serviceWorker.register("./service-worker.js"); }
+// ==========================
+// DRAG & DROP
+// ==========================
+function dragStart(i){dragIndex=i;}
+function drop(i){ if(dragIndex===null) return; const moved=apps.splice(dragIndex,1)[0]; apps.splice(i,0,moved); dragIndex=null; localStorage.setItem("hubApps", JSON.stringify(apps)); render(); }
 
+// ==========================
 // EXPORT / IMPORT
-function exportData(){ const blob=new Blob([JSON.stringify(apps)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="hub-backup.json"; a.click(); }
-function importData(e){ const r=new FileReader(); r.onload=()=>{apps=JSON.parse(r.result); render(); localStorage.setItem("hubApps",JSON.stringify(apps));} r.readAsText(e.target.files[0]); }
+// ==========================
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const blob=new Blob([JSON.stringify(apps)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="hub-backup.json";
+    a.click();
+});
+document.getElementById("importInput").addEventListener("change", e=>{
+    const r=new FileReader();
+    r.onload=()=>{ apps=JSON.parse(r.result); localStorage.setItem("hubApps", JSON.stringify(apps)); render(); };
+    r.readAsText(e.target.files[0]);
+});
 
+// ==========================
+// INITIAL RENDER
+// ==========================
+render();
 </script>
 </body>
 </html>
+
